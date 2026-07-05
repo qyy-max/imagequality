@@ -7,7 +7,8 @@ from kivy.uix.image import Image as KivyImage
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
-from kivy.uix.filechooser import FileChooserListView
+#from kivy.uix.filechooser import FileChooserListView
+from plyer import filechooser
 from kivy.core.window import Window
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
@@ -260,6 +261,12 @@ class ImageQualityApp(App):
             line_height=1.6
         )
         self.result_label.bind(texture_size=self.result_label.setter('size'))
+
+        self.result_label.bind(texture_size=self._update_height)
+
+        def _update_height(self, instance, value):
+              instance.height = value[1] + 20
+              instance.text_size = (self.result_label.width, None)
         scroll.add_widget(self.result_label)
         result_card.add_widget(scroll)
         root.add_widget(result_card)
@@ -270,14 +277,12 @@ class ImageQualityApp(App):
         self.full_size = None
         return root
 
-    def open_filechooser(self, instance):
-        content = FileChooserListView(filters=['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.BMP'])
-        popup = Popup(title="选择图片", content=content, size_hint=(0.9, 0.9))
-        content.bind(on_submit=lambda instance, selection, _: self.load_selected(selection, popup))
-        popup.open()
-
-    def load_selected(self, selection, popup):
-        popup.dismiss()
+     def open_filechooser(self, instance):
+         filechooser.open_file(
+              on_selection=self.load_selected
+      )
+ 
+    def load_selected(self, selection):
         if not selection:
             return
         filepath = selection[0]

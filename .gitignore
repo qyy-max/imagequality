@@ -1,0 +1,10 @@
+# buildozer
+.buildozer/
+bin/
+
+# python
+__pycache__/
+*.pyc
+
+# package
+*.zip
