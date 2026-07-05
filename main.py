@@ -3,15 +3,18 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image as KivyImage
 from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle
 from kivy.core.text import LabelBase
+from plyer import filechooser
 
-from PIL import Image, ImageStat, ImageFilter, ImageChops
+from PIL import Image, ImageStat, ImageFilter
 import os
+import sys
 
-# ================= 字体 =================
+# ------------------- 字体 -------------------
 def register_chinese_font():
     font_file = "NotoSansSC-Regular.ttf"
     if os.path.exists(font_file):
@@ -21,8 +24,7 @@ def register_chinese_font():
 
 FONT_NAME = register_chinese_font()
 
-
-# ================= 图像分析 =================
+# ------------------- 图像分析（PIL版） -------------------
 class ImageQualityAnalyzer:
 
     @staticmethod
@@ -39,6 +41,7 @@ class ImageQualityAnalyzer:
 
     @staticmethod
     def sharpness(gray):
+        # Laplacian近似：用边缘方差代替
         edge = gray.filter(ImageFilter.FIND_EDGES)
         stat = ImageStat.Stat(edge)
         return stat.var[0]
@@ -65,7 +68,7 @@ class ImageQualityAnalyzer:
     @staticmethod
     def noise(gray):
         blur = gray.filter(ImageFilter.MedianFilter(size=3))
-        diff = ImageChops.difference(gray, blur)
+        diff = ImageChops_difference(gray, blur)
 
         stat = ImageStat.Stat(diff)
         var = stat.var[0] / 255.0
@@ -99,7 +102,13 @@ class ImageQualityAnalyzer:
         }
 
 
-# ================= UI =================
+# PIL差分函数（替代numpy）
+from PIL import ImageChops
+def ImageChops_difference(img1, img2):
+    return ImageChops.difference(img1, img2)
+
+
+# ------------------- UI -------------------
 class Styled(BoxLayout):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -113,15 +122,14 @@ class Styled(BoxLayout):
         self.rect.pos = self.pos
 
 
-# ================= APP =================
 class AppMain(App):
 
     def build(self):
-        Window.clearcolor = (0.95, 0.95, 0.97, 1)
+        Window.size = (900, 700)
 
         root = Styled(orientation='vertical', padding=15, spacing=10)
 
-        self.label = Label(text="选择图片进行分析", font_name=FONT_NAME)
+        self.label = Label(text="选择图片", font_name=FONT_NAME)
         root.add_widget(self.label)
 
         btn = Button(text="选择图片", size_hint=(1, 0.1))
@@ -134,76 +142,42 @@ class AppMain(App):
         self.result = Label(text="")
         root.add_widget(self.result)
 
-        self.gray = None
         self.path = None
-
         return root
 
-    # ================= Android 原生选图（SAF） =================
     def pick(self, *args):
-        try:
-            from android import activity
-            from jnius import autoclass
+        filechooser.open_file(on_selection=self.selected)
 
-            Intent = autoclass('android.content.Intent')
-
-            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
-            intent.addCategory(Intent.CATEGORY_OPENABLE)
-            intent.setType("image/*")
-
-            activity.bind(on_activity_result=self._on_activity_result)
-            activity.startActivityForResult(intent, 1)
-
-        except Exception as e:
-            self.result.text = f"选图失败: {str(e)}"
-
-    def _on_activity_result(self, requestCode, resultCode, data):
-        try:
-            if resultCode != -1 or data is None:
-                return
-
-            uri = data.getData()
-            path = str(uri)
-
-            self.load_image_fallback(path)
-
-        except Exception as e:
-            self.result.text = f"回调错误: {str(e)}"
-
-    # ================= 安全加载 =================
-    def load_image_fallback(self, path):
-        try:
-            img, gray, size = ImageQualityAnalyzer.load_image(path)
-
-            tmp = os.path.join(self.user_data_dir, "tmp.jpg")
-            img.save(tmp)
-
-            self.img.source = tmp
-            self.img.reload()
-
-            self.gray = gray
-            self.result.text = "已加载，分析中..."
-
-            Clock.schedule_once(self.run, 0.2)
-
-        except Exception as e:
-            self.result.text = f"图片加载失败: {str(e)}"
-
-    def run(self, dt):
-        if self.gray is None:
+    def selected(self, files):
+        if not files:
             return
 
+        self.path = files[0]
+
+        img, gray, size = ImageQualityAnalyzer.load_image(self.path)
+
+        tmp = os.path.join(self.user_data_dir, "tmp.jpg")
+        img.save(tmp)
+
+        self.img.source = tmp
+        self.img.reload()
+
+        self.gray = gray
+        self.result.text = "已加载"
+
+        Clock.schedule_once(self.run, 0.1)
+
+    def run(self, dt):
         r = ImageQualityAnalyzer.evaluate(self.gray)
 
-        self.result.text = (
-            f"总分: {r['total']}\n"
-            f"清晰度: {r['sharp']:.2f}\n"
-            f"曝光: {r['exp']:.2f}\n"
-            f"噪声: {r['noise']:.2f}\n"
-            f"均值亮度: {r['mean']:.1f}"
-        )
+        self.result.text = f"""
+总分: {r['total']}
+清晰度: {r['sharp']:.2f}
+曝光: {r['exp']:.2f}
+噪声: {r['noise']:.2f}
+均值亮度: {r['mean']:.1f}
+"""
 
 
-# ================= RUN =================
 if __name__ == '__main__':
     AppMain().run()
