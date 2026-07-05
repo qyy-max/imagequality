@@ -14,7 +14,7 @@ fullscreen = 0
 
 android.permissions = INTERNET, CAMERA, READ_MEDIA_IMAGES, READ_EXTERNAL_STORAGE
 
-android.api = 33
+android.api = 31
 android.minapi = 24
 android.ndk = 25b
 
